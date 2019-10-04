@@ -8,11 +8,11 @@ extern crate reqwest;
 use std::time::{Duration, Instant};
 //use std::env;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 //use warp::{http::StatusCode, Filter};
 use warp::{Filter};
 
-type Store = Arc<Mutex<TimedString>>;
+type Store = Arc<RwLock<TimedString>>;
 
 struct TimedString {
     time: Instant,
@@ -34,7 +34,7 @@ fn main() {
         url: String::from("http://developer.itsmarta.com/BRDRestService/RestBusRealTimeService/GetAllBus"),
         text: String::from("<unused>")
     };
-    let bus_cache = Arc::new(Mutex::new(bus_cache));
+    let bus_cache = Arc::new(RwLock::new(bus_cache));
     let bus_cache = warp::any().map(move || bus_cache.clone());
 
     let busses = warp::path("busses");
@@ -54,12 +54,28 @@ fn main() {
     warp::serve(routes).run(([0, 0, 0, 0], 3030));
 }
 
+
 // read from cache if it's still valid, otherwise hit the URL + write
 fn cache_visit(cache: Store) -> impl warp::Reply {
-    let mut timed_string = cache.lock().unwrap();
-    if Instant::now() > timed_string.time {
-        timed_string.time = Instant::now() + Duration::from_secs(10);
-        timed_string.text = reqwest::get(&timed_string.url).unwrap().text().unwrap();
+    {
+        // base case: cache still valid, only need a read lock.
+        // should be very fast
+        let timed_string = cache.read().unwrap();
+        if Instant::now() < timed_string.time {
+            return timed_string.text.clone();
+        }
     }
+
+    // acquire write lock
+    let mut timed_string = cache.write().unwrap();
+    // check if someone else acquired the write lock while we were blocked
+    // and updated the cache already, so just return result
+    if Instant::now() < timed_string.time {
+        return timed_string.text.clone();
+    }
+
+    // otherwise we have to update the cache, slowest case.
+    timed_string.time = Instant::now() + Duration::from_secs(10);
+    timed_string.text = reqwest::get(&timed_string.url).unwrap().text().unwrap();
     timed_string.text.clone()
 }
