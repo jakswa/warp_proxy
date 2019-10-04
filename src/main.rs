@@ -38,8 +38,6 @@ fn main() {
     let bus_cache = warp::any().map(move || bus_cache.clone());
 
     let busses = warp::path("busses");
-    // Combined with `end`, this means nothing comes after "todos".
-    // So, for example: `GET /todos`, but not `GET /todos/32`.
     let busses_index = busses.and(warp::path::end());
 
     // `GET /busses`
@@ -48,7 +46,7 @@ fn main() {
         .and(bus_cache.clone())
         .map(cache_visit);
 
-    // View access logs by setting `RUST_LOG=todos`.
+    // View access logs by setting `RUST_LOG=busses`.
     let routes = list.with(warp::log("busses"));
     //    .or(list2.with(warp::log("trains")));
 
@@ -56,8 +54,8 @@ fn main() {
     warp::serve(routes).run(([0, 0, 0, 0], 3030));
 }
 
+// read from cache if it's still valid, otherwise hit the URL + write
 fn cache_visit(cache: Store) -> impl warp::Reply {
-    // Just return a JSON array of todos, applying the limit and offset.
     let mut timed_string = cache.lock().unwrap();
     if Instant::now() > timed_string.time {
         timed_string.time = Instant::now() + Duration::from_secs(10);
