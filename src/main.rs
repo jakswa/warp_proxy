@@ -1,13 +1,11 @@
 #![deny(warnings)]
 extern crate log;
 extern crate pretty_env_logger;
-extern crate serde;
-extern crate serde_derive;
 extern crate warp;
 extern crate reqwest;
 extern crate bytes;
 use std::time::{Duration, Instant};
-//use std::env;
+use std::env;
 
 use std::sync::{Arc, RwLock};
 //use warp::{http::StatusCode, Filter};
@@ -26,7 +24,7 @@ struct TimedString {
 ///
 /// API will be:
 ///
-/// - `GET /busses`: return a JSON list of busses.
+/// - `GET /buses`: return a JSON list of buses.
 fn main() {
     pretty_env_logger::init();
 
@@ -39,18 +37,35 @@ fn main() {
     let bus_cache = Arc::new(RwLock::new(bus_cache));
     let bus_cache = warp::any().map(move || bus_cache.clone());
 
-    let busses = warp::path("busses");
-    let busses_index = busses.and(warp::path::end());
+    let train_route = format!("http://developer.itsmarta.com/RealtimeTrain/RestServiceNextTrain/GetRealtimeArrivals?apikey={}", env::var("MARTA_TRAIN_API_KEY").unwrap());
+    let trains_cache = TimedString {
+        time: Instant::now() - Duration::from_secs(30),
+        url: train_route,
+        text: Bytes::from(&b"<unused>"[..])
+    };
+    let trains_cache = Arc::new(RwLock::new(trains_cache));
+    let trains_cache = warp::any().map(move || trains_cache.clone());
 
-    // `GET /busses`
+    let buses = warp::path("buses");
+    let buses_index = buses.and(warp::path::end());
+
+    // `GET /buses`
     let list = warp::get2()
-        .and(busses_index)
+        .and(buses_index)
         .and(bus_cache.clone())
         .map(cache_visit);
 
-    // View access logs by setting `RUST_LOG=busses`.
-    let routes = list.with(warp::log("busses"));
-    //    .or(list2.with(warp::log("trains")));
+    let trains = warp::path("trains");
+    let trains_index = trains.and(warp::path::end());
+
+    // `GET /trains`
+    let list2 = warp::get2()
+        .and(trains_index)
+        .and(trains_cache.clone())
+        .map(cache_visit);
+    // View access logs by setting `RUST_LOG=buses`.
+    let routes = list.with(warp::log("buses"))
+        .or(list2.with(warp::log("trains")));
 
     // Start up the server...
     warp::serve(routes).run(([0, 0, 0, 0], 3030));
