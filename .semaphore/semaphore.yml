@@ -1,0 +1,17 @@
+version: v1.0
+name: Rust example
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+  containers:
+    - name: main
+      image: semaphoreci/rust:1.38
+blocks:
+  - name: Build + Test
+    task:
+      jobs:
+        - name: Run Cargo Test
+          commands:
+            - checkout
+            - cargo test
