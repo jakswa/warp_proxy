@@ -9,11 +9,11 @@ use std::env;
 
 use std::sync::{Arc, RwLock};
 use warp::{Filter, http::Response};
-use timed_string::TimedString;
+use cached_bytes::CachedBytes;
 
-type Store = Arc<RwLock<TimedString>>;
+type Store = Arc<RwLock<CachedBytes>>;
 
-mod timed_string;
+mod cached_bytes;
 
 
 /// Provides a RESTful web server managing some Todos.
@@ -25,7 +25,7 @@ fn main() {
     pretty_env_logger::init();
 
     // Turn our state into a Filter so we can combine it easily later
-    let bus_cache = TimedString::new("http://developer.itsmarta.com/BRDRestService/RestBusRealTimeService/GetAllBus",
+    let bus_cache = CachedBytes::new("http://developer.itsmarta.com/BRDRestService/RestBusRealTimeService/GetAllBus",
                                      Duration::from_secs(10));
     let bus_cache = Arc::new(RwLock::new(bus_cache));
     let bus_cache = warp::any().map(move || bus_cache.clone());
@@ -34,7 +34,7 @@ fn main() {
         "http://developer.itsmarta.com/RealtimeTrain/RestServiceNextTrain/GetRealtimeArrivals?apikey={}",
         env::var("MARTA_TRAIN_API_KEY").unwrap_or("please_set_api_key".to_string())
     );
-    let trains_cache = TimedString::new(train_route, Duration::from_secs(10));
+    let trains_cache = CachedBytes::new(train_route, Duration::from_secs(10));
     let trains_cache = Arc::new(RwLock::new(trains_cache));
     let trains_cache = warp::any().map(move || trains_cache.clone());
 
@@ -78,26 +78,26 @@ fn main() {
 }
 
 
-// read from cache if it's still valid, otherwise hit the URL + write
-fn cache_visit(cache: Store) -> impl warp::Reply {
+// read from cache store if it's still valid, otherwise hit the URL + write
+fn cache_visit(store: Store) -> impl warp::Reply {
     {
-        // base case: cache still valid, only need a read lock.
+        // base case: store still valid, only need a read lock.
         // should be very fast
-        let timed_string = cache.read().unwrap();
-        if timed_string.is_valid() {
-            return Response::new(timed_string.text.clone());
+        let cache = store.read().unwrap();
+        if cache.is_valid() {
+            return Response::new(cache.text.clone());
         }
     }
 
     // acquire write lock
-    let mut timed_string = cache.write().unwrap();
+    let mut cache = store.write().unwrap();
     // check if someone else acquired the write lock while we were blocked
-    // and updated the cache already, so just return result
-    if timed_string.is_valid() {
-        return Response::new(timed_string.text.clone());
+    // and updated the store already, so just return result
+    if cache.is_valid() {
+        return Response::new(cache.text.clone());
     }
 
-    // otherwise we have to update the cache, slowest case.
-    timed_string.refresh();
-    Response::new(timed_string.text.clone())
+    // otherwise we have to update the store, slowest case.
+    cache.refresh();
+    Response::new(cache.text.clone())
 }
