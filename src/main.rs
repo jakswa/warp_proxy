@@ -30,7 +30,10 @@ fn main() {
     let bus_cache = Arc::new(RwLock::new(bus_cache));
     let bus_cache = warp::any().map(move || bus_cache.clone());
 
-    let train_route = format!("http://developer.itsmarta.com/RealtimeTrain/RestServiceNextTrain/GetRealtimeArrivals?apikey={}", env::var("MARTA_TRAIN_API_KEY").unwrap());
+    let train_route = format!(
+        "http://developer.itsmarta.com/RealtimeTrain/RestServiceNextTrain/GetRealtimeArrivals?apikey={}",
+        env::var("MARTA_TRAIN_API_KEY").unwrap_or("please_set_api_key".to_string())
+    );
     let trains_cache = TimedString::new(train_route, Duration::from_secs(10));
     let trains_cache = Arc::new(RwLock::new(trains_cache));
     let trains_cache = warp::any().map(move || trains_cache.clone());
@@ -56,8 +59,20 @@ fn main() {
     let routes = list.with(warp::log("buses"))
         .or(list2.with(warp::log("trains")));
 
-    // Start up the server...
-    warp::serve(routes).run(([0, 0, 0, 0], 3030));
+    // optionally binding it to SSL on port 443
+    if let Some(ssl_key) = env::var_os("SSL_KEY") {
+        let ssl_cert = env::var("SSL_CERT").unwrap();
+        warp::serve(routes.clone())
+            .tls(ssl_cert, ssl_key)
+            .run(([0, 0, 0, 0], 443));
+    } else {
+        // Start up the server...
+        let port: u16 = env::var("PORT")
+            .unwrap_or("3030".to_string())
+            .parse().unwrap();
+        warp::serve(routes.clone())
+            .run(([0, 0, 0, 0], port));
+    }
 }
 
 
