@@ -1,5 +1,5 @@
 version: v1.0
-name: Rust example
+name: Warp Proxy Build
 agent:
   machine:
     type: e1-standard-2
@@ -13,5 +13,7 @@ blocks:
       jobs:
         - name: Run Cargo Test
           commands:
-            - checkout
-            - cargo test
+          - checkout
+          - cache restore target-$SEMAPHORE_GIT_BRANCH-revision-$(checksum Cargo.lock),target-master
+          - CARGO_HOME=target/cargo_home cargo test
+          - cache store target-$SEMAPHORE_GIT_BRANCH-revision-$(checksum Cargo.lock) target
