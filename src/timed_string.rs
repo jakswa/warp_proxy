@@ -37,6 +37,7 @@ impl TimedString {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
