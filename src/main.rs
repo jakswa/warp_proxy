@@ -4,21 +4,17 @@ extern crate pretty_env_logger;
 extern crate warp;
 extern crate reqwest;
 extern crate bytes;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::env;
 
 use std::sync::{Arc, RwLock};
-//use warp::{http::StatusCode, Filter};
 use warp::{Filter, http::Response};
-use bytes::Bytes;
+use timed_string::TimedString;
 
 type Store = Arc<RwLock<TimedString>>;
 
-struct TimedString {
-    time: Instant,
-    url: String,
-    text: Bytes,
-}
+mod timed_string;
+
 
 /// Provides a RESTful web server managing some Todos.
 ///
@@ -29,20 +25,13 @@ fn main() {
     pretty_env_logger::init();
 
     // Turn our state into a Filter so we can combine it easily later
-    let bus_cache = TimedString {
-        time: Instant::now() - Duration::from_secs(30),
-        url: String::from("http://developer.itsmarta.com/BRDRestService/RestBusRealTimeService/GetAllBus"),
-        text: Bytes::from(&b"<unused>"[..])
-    };
+    let bus_cache = TimedString::new("http://developer.itsmarta.com/BRDRestService/RestBusRealTimeService/GetAllBus",
+                                     Duration::from_secs(10));
     let bus_cache = Arc::new(RwLock::new(bus_cache));
     let bus_cache = warp::any().map(move || bus_cache.clone());
 
     let train_route = format!("http://developer.itsmarta.com/RealtimeTrain/RestServiceNextTrain/GetRealtimeArrivals?apikey={}", env::var("MARTA_TRAIN_API_KEY").unwrap());
-    let trains_cache = TimedString {
-        time: Instant::now() - Duration::from_secs(30),
-        url: train_route,
-        text: Bytes::from(&b"<unused>"[..])
-    };
+    let trains_cache = TimedString::new(train_route, Duration::from_secs(10));
     let trains_cache = Arc::new(RwLock::new(trains_cache));
     let trains_cache = warp::any().map(move || trains_cache.clone());
 
@@ -78,7 +67,7 @@ fn cache_visit(cache: Store) -> impl warp::Reply {
         // base case: cache still valid, only need a read lock.
         // should be very fast
         let timed_string = cache.read().unwrap();
-        if Instant::now() < timed_string.time {
+        if timed_string.is_valid() {
             return Response::new(timed_string.text.clone());
         }
     }
@@ -87,13 +76,11 @@ fn cache_visit(cache: Store) -> impl warp::Reply {
     let mut timed_string = cache.write().unwrap();
     // check if someone else acquired the write lock while we were blocked
     // and updated the cache already, so just return result
-    if Instant::now() < timed_string.time {
+    if timed_string.is_valid() {
         return Response::new(timed_string.text.clone());
     }
 
     // otherwise we have to update the cache, slowest case.
-    timed_string.time = Instant::now() + Duration::from_secs(10);
-    let resp_text = reqwest::get(&timed_string.url).unwrap().text().unwrap();
-    timed_string.text = Bytes::from(resp_text);
+    timed_string.refresh();
     Response::new(timed_string.text.clone())
 }
