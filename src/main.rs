@@ -6,9 +6,11 @@ extern crate reqwest;
 extern crate bytes;
 use std::time::Duration;
 use std::env;
+use bytes::Bytes;
 
 use std::sync::{Arc, RwLock};
-use warp::{Filter, http::Response};
+use warp::Filter;
+use warp::http::{Response,StatusCode};
 use cached_bytes::CachedBytes;
 
 type Store = Arc<RwLock<CachedBytes>>;
@@ -85,7 +87,7 @@ fn cache_visit(store: Store) -> impl warp::Reply {
         // should be very fast
         let cache = store.read().unwrap();
         if cache.is_valid() {
-            return Response::new(cache.text.clone());
+            return Response::new(cache.bytes())
         }
     }
 
@@ -94,10 +96,17 @@ fn cache_visit(store: Store) -> impl warp::Reply {
     // check if someone else acquired the write lock while we were blocked
     // and updated the store already, so just return result
     if cache.is_valid() {
-        return Response::new(cache.text.clone());
+        return Response::new(cache.bytes());
     }
 
     // otherwise we have to update the store, slowest case.
-    cache.refresh();
-    Response::new(cache.text.clone())
+    match cache.refresh() {
+        Ok(_) => Response::new(cache.bytes()),
+        Err(e) => {
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Bytes::from(format!("{}", e)))
+                .unwrap()
+        }
+    }
 }
