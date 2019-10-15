@@ -12,9 +12,9 @@ fi
 
 set -x
 
-install -C ./marta.env /usr/local/etc/marta.env
-install -C ./target/release/warp_proxy /usr/local/bin/warp_proxy
-install -C ./warp-proxy.service /etc/systemd/system/warp-proxy.service
+install -C --mode=0644 ./marta.env /usr/local/etc/marta.env
+install -C --mode=0755 ./target/release/warp_proxy /usr/local/bin/warp_proxy
+install -C --mode=0644 ./warp-proxy.service /etc/systemd/system/warp-proxy.service
 
 systemctl daemon-reload
 
