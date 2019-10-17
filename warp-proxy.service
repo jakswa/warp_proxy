@@ -1,0 +1,15 @@
+[Unit]
+Description=WARP Marta Proxy
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+RuntimeDirectory=warp-proxy
+Restart=always
+ExecStart=/usr/local/bin/warp_proxy
+EnvironmentFile=/usr/local/etc/marta.env
+
+[Install]
+WantedBy=multi-user.target
+
