@@ -45,7 +45,8 @@ fn main() {
     let list = warp::get2()
         .and(buses_index)
         .and(bus_cache.clone())
-        .map(cache_visit);
+        .map(cache_visit)
+        .with(warp::reply::with::header("Access-Control-Allow-Origin", "*"));
 
     let trains = warp::path("trains");
     let trains_index = trains.and(warp::path::end());
@@ -54,7 +55,8 @@ fn main() {
     let list2 = warp::get2()
         .and(trains_index)
         .and(trains_cache.clone())
-        .map(cache_visit);
+        .map(cache_visit)
+        .with(warp::reply::with::header("Access-Control-Allow-Origin", "*"));
     // View access logs by setting `RUST_LOG=buses`.
     let routes = list.with(warp::log("buses"))
         .or(list2.with(warp::log("trains")));
