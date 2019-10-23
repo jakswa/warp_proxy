@@ -11,6 +11,7 @@ type CacheUpdateFn = fn (&str) -> Result<Bytes, Box<dyn error::Error>>;
 pub enum MartaError {
     Unauthorized,
     InternalServerError,
+    TimeoutError,
     GenericError(StatusCode)
 }
 
@@ -19,6 +20,7 @@ impl fmt::Display for MartaError {
         match self {
             MartaError::Unauthorized => write!(f, "{}", "Authorization failed against MARTA API"),
             MartaError::InternalServerError => write!(f, "{}", "MARTA API did not return results"),
+            MartaError::TimeoutError => write!(f, "{}", "MARTA API timed out"),
             MartaError::GenericError(code) => write!(f, "MARTA API returned HTTP {}", code)
         }
     }
@@ -38,19 +40,34 @@ pub struct CachedBytes {
 impl CachedBytes {
     pub fn new<S: Into<String>>(url: S, ttl: Duration) -> CachedBytes {
         CachedBytes::new_with_updater(url, ttl, |endpoint| {
-            let mut resp = reqwest::get(endpoint)?;
-            let status = resp.status();
-
-            match status {
-                StatusCode::OK => {
-                    let text = resp.text()?;
-                    Ok(Bytes::from(text))
-                },
-                StatusCode::UNAUTHORIZED => Err(Box::new(MartaError::Unauthorized)),
-                StatusCode::INTERNAL_SERVER_ERROR => Err(Box::new(MartaError::InternalServerError)),
-                _ => Err(Box::new(MartaError::GenericError(status)))
+            match reqwest::get(endpoint) {
+                Err(e) => Err(Box::new(CachedBytes::handle_client_error(e))),
+                Ok(resp) => CachedBytes::handle_response(resp)
             }
         })
+    }
+
+    fn handle_response(mut resp: reqwest::Response) -> Result<Bytes, Box<dyn error::Error>> {
+        let status = resp.status();
+
+        match status {
+            StatusCode::OK => {
+                let text = resp.text()?;
+                Ok(Bytes::from(text))
+            },
+            StatusCode::UNAUTHORIZED => Err(Box::new(MartaError::Unauthorized)),
+            StatusCode::INTERNAL_SERVER_ERROR => Err(Box::new(MartaError::InternalServerError)),
+            _ => Err(Box::new(MartaError::GenericError(status)))
+        }
+    }
+
+    fn handle_client_error(e: reqwest::Error) -> MartaError {
+        if e.is_timeout() {
+            MartaError::TimeoutError
+        } else {
+            let stat = e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            MartaError::GenericError(stat)
+        }
     }
 
     pub fn new_with_updater<S: Into<String>>(url: S, ttl: Duration, updater: CacheUpdateFn) -> CachedBytes {
