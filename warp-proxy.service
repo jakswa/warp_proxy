@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 DynamicUser=yes
 RuntimeDirectory=warp-proxy
+StateDirectory=warp-proxy
 Restart=always
 ExecStart=/usr/local/bin/warp_proxy
 EnvironmentFile=/usr/local/etc/marta.env
