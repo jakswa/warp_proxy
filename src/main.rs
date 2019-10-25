@@ -4,6 +4,9 @@ extern crate pretty_env_logger;
 extern crate warp;
 extern crate reqwest;
 extern crate bytes;
+extern crate listenfd;
+extern crate tokio;
+
 use std::time::Duration;
 use std::env;
 use bytes::Bytes;
@@ -11,7 +14,10 @@ use bytes::Bytes;
 use std::sync::{Arc, RwLock};
 use warp::Filter;
 use warp::http::{Response,StatusCode};
+use listenfd::ListenFd;
 use cached_bytes::CachedBytes;
+use tokio::net::TcpListener as TokioTcpListener;
+use tokio::reactor::Handle;
 
 type Store = Arc<RwLock<CachedBytes>>;
 
@@ -48,7 +54,8 @@ fn main() {
         .and(buses_index)
         .and(bus_cache.clone())
         .map(cache_visit)
-        .with(warp::reply::with::header("Access-Control-Allow-Origin", "*"));
+        .with(warp::reply::with::header("Access-Control-Allow-Origin", "*"))
+        .with(warp::reply::with::header("Wombats", "always"));
 
     let trains = warp::path("trains");
     let trains_index = trains.and(warp::path::end());
@@ -63,20 +70,33 @@ fn main() {
     let routes = list.with(warp::log("buses"))
         .or(list2.with(warp::log("trains")));
 
-    // optionally binding it to SSL on port 443
-    if let Some(ssl_key) = env::var_os("SSL_KEY") {
-        let ssl_cert = env::var("SSL_CERT").unwrap();
-        warp::serve(routes.clone())
-            .tls(ssl_cert, ssl_key)
-            .run(([0, 0, 0, 0], 443));
-    } else {
-        // Start up the server...
-        let port: u16 = env::var("PORT")
-            .unwrap_or("3030".to_string())
-            .parse().unwrap();
-        warp::serve(routes.clone())
-            .run(([0, 0, 0, 0], port));
+
+    let server = warp::serve(routes.clone());
+    // if let Some(ssl_key) = env::var_os("SSL_KEY") {
+    //     let ssl_cert = env::var("SSL_CERT").unwrap();
+    //     server = server.tls(ssl_cert, ssl_key);
+    // }
+
+    let mut listenfd = ListenFd::from_env();
+    match listenfd.take_tcp_listener(0) {
+        Ok(Some(listener)) => {
+            if let Ok(tokio_listener) = TokioTcpListener::from_std(listener, &Handle::default()) {
+                server.run_incoming(tokio_listener.incoming());
+            }
+        },
+        _ => {
+
+            let port: u16 = env::var("PORT")
+                .unwrap_or("3030".to_string())
+                .parse().unwrap();
+
+            match env::var_os("SSL_KEY") {
+                Some(_) => server.run(([0, 0, 0, 0], 443)),
+                _ => server.run(([0, 0, 0, 0], port))
+            }
+        }
     }
+    ()
 }
 
 
