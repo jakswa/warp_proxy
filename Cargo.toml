@@ -3,6 +3,7 @@ name = "warp_proxy"
 version = "0.1.0"
 authors = ["Jake Swanson <jakswa@gmail.com>"]
 edition = "2018"
+default-run = "marta_proxy"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,3 +13,8 @@ log = "0.4"
 pretty_env_logger = "0.3"
 reqwest = "=0.9.17"
 bytes = "0.4.12"
+
+# gtfs tasks
+# tempfile = "3.1"
+zip = "0.5"
+dirs = "2.0"

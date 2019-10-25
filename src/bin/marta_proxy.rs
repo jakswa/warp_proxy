@@ -4,6 +4,7 @@ extern crate pretty_env_logger;
 extern crate warp;
 extern crate reqwest;
 extern crate bytes;
+extern crate warp_proxy;
 use std::time::Duration;
 use std::env;
 use bytes::Bytes;
@@ -15,7 +16,7 @@ use cached_bytes::CachedBytes;
 
 type Store = Arc<RwLock<CachedBytes>>;
 
-mod cached_bytes;
+use warp_proxy::cached_bytes;
 
 
 /// Provides a RESTful web server managing some Todos.
